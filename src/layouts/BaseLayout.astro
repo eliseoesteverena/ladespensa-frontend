@@ -1,0 +1,27 @@
+---
+// src/layouts/BaseLayout.astro
+// Layout base: aplica base.css, meta tags y estructura HTML global.
+
+const { title = 'La Despensa' } = Astro.props;
+---
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="La Despensa — Control de stock doméstico" />
+  <title>{title} — La Despensa</title>
+  <link rel="stylesheet" href="/base.css" />
+  <style>
+    /* Tokens de color de La Despensa — sobreescriben el azul de base.css */
+    :root {
+      --accent:       #16a34a;   /* verde */
+      --accent-dark:  #15803d;
+      --accent-light: #dcfce7;
+    }
+  </style>
+</head>
+<body>
+  <slot />
+</body>
+</html>

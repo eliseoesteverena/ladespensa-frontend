@@ -1,0 +1,314 @@
+---
+// src/pages/register.astro
+// Página pública de registro.
+// Soporta: crear hogar nuevo (flujo 1) o unirse a uno existente (flujo 2).
+import BaseLayout from '../layouts/BaseLayout.astro';
+---
+<BaseLayout title="Crear cuenta">
+  <style>
+    :root {
+      --accent: #16a34a;
+      --accent-dark: #15803d;
+      --accent-light: #dcfce7;
+    }
+
+    body {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background-color: var(--gray-50);
+      padding: var(--space-4);
+    }
+
+    .auth-card {
+      background: var(--white);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: var(--space-8);
+      width: 100%;
+      max-width: 460px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+    }
+
+    .auth-card h1 { font-size: var(--font-2xl); margin-bottom: var(--space-1); }
+    .auth-card p.subtitle { color: var(--text-muted); font-size: var(--font-sm); margin-bottom: var(--space-6); }
+
+    .tabs {
+      display: flex;
+      gap: 0;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      overflow: hidden;
+      margin-bottom: var(--space-6);
+    }
+
+    .tab-btn {
+      flex: 1;
+      border: none;
+      border-radius: 0;
+      background: var(--white);
+      color: var(--gray-700);
+      font-size: var(--font-sm);
+      cursor: pointer;
+      padding: var(--space-2) var(--space-4);
+      transition: background-color var(--transition);
+    }
+
+    .tab-btn.active {
+      background-color: var(--accent);
+      color: var(--white);
+    }
+
+    .form-panel { display: none; }
+    .form-panel.active { display: block; }
+
+    .form-group { margin-bottom: var(--space-4); }
+
+    .error-msg {
+      background-color: #fef2f2;
+      border: 1px solid #fecaca;
+      border-radius: var(--radius-md);
+      color: #dc2626;
+      font-size: var(--font-sm);
+      padding: var(--space-3) var(--space-4);
+      margin-bottom: var(--space-4);
+      display: none;
+    }
+
+    .error-msg.visible { display: block; }
+
+    .success-msg {
+      background-color: var(--accent-light);
+      border: 1px solid #bbf7d0;
+      border-radius: var(--radius-md);
+      color: var(--accent-dark);
+      font-size: var(--font-sm);
+      padding: var(--space-4);
+      margin-bottom: var(--space-4);
+      display: none;
+    }
+
+    .success-msg.visible { display: block; }
+    .success-msg strong { display: block; margin-bottom: var(--space-2); }
+
+    .tenant-id-copy {
+      font-family: monospace;
+      background: var(--gray-100);
+      padding: var(--space-2) var(--space-3);
+      border-radius: var(--radius-sm);
+      font-size: var(--font-sm);
+      word-break: break-all;
+      margin-top: var(--space-2);
+    }
+
+    .btn-full { width: 100%; justify-content: center; margin-top: var(--space-2); }
+
+    .auth-footer {
+      text-align: center;
+      margin-top: var(--space-6);
+      font-size: var(--font-sm);
+      color: var(--text-muted);
+    }
+
+    .password-rules {
+      font-size: var(--font-xs);
+      color: var(--text-muted);
+      margin-top: var(--space-1);
+    }
+  </style>
+
+  <div class="auth-card">
+    <h1>🥦 La Despensa</h1>
+    <p class="subtitle">Creá tu cuenta para empezar a gestionar tu stock.</p>
+
+    <div class="tabs">
+      <button class="tab-btn active" id="tab-nuevo" type="button">Crear hogar</button>
+      <button class="tab-btn" id="tab-unirse" type="button">Unirme a un hogar</button>
+    </div>
+
+    <!-- ── Panel: Crear hogar nuevo ── -->
+    <div class="form-panel active" id="panel-nuevo">
+      <div class="error-msg" id="error-nuevo" role="alert"></div>
+      <div class="success-msg" id="success-nuevo">
+        <strong>🎉 ¡Cuenta creada correctamente!</strong>
+        <p>Guardá el ID de tu hogar — lo necesitás para iniciar sesión:</p>
+        <div class="tenant-id-copy" id="tenant-id-display"></div>
+        <div style="margin-top: var(--space-4);">
+          <a href="/login"><button type="button" class="btn-full">Ir al login</button></a>
+        </div>
+      </div>
+
+      <form id="form-nuevo" novalidate>
+        <div class="form-group">
+          <label for="n-email">Correo electrónico</label>
+          <input type="email" id="n-email" placeholder="tu@correo.com" autocomplete="email" required />
+        </div>
+
+        <div class="form-group">
+          <label for="n-password">Contraseña</label>
+          <input type="password" id="n-password" placeholder="••••••••" autocomplete="new-password" required />
+          <p class="password-rules">Mín. 8 caracteres · 1 mayúscula · 1 número · 1 símbolo especial</p>
+        </div>
+
+        <div class="form-group">
+          <label for="n-workspace">Nombre del hogar</label>
+          <input type="text" id="n-workspace" placeholder="Casa García" required />
+        </div>
+
+        <button type="submit" class="btn-full" id="btn-nuevo">Crear hogar</button>
+      </form>
+    </div>
+
+    <!-- ── Panel: Unirse a hogar existente ── -->
+    <div class="form-panel" id="panel-unirse">
+      <div class="error-msg" id="error-unirse" role="alert"></div>
+      <div class="success-msg" id="success-unirse">
+        <strong>🎉 ¡Te uniste al hogar correctamente!</strong>
+        <p>Ya podés ingresar con tu email y contraseña.</p>
+        <div style="margin-top: var(--space-4);">
+          <a href="/login"><button type="button" class="btn-full">Ir al login</button></a>
+        </div>
+      </div>
+
+      <form id="form-unirse" novalidate>
+        <div class="form-group">
+          <label for="u-email">Correo electrónico</label>
+          <input type="email" id="u-email" placeholder="tu@correo.com" autocomplete="email" required />
+        </div>
+
+        <div class="form-group">
+          <label for="u-password">Contraseña</label>
+          <input type="password" id="u-password" placeholder="••••••••" autocomplete="new-password" required />
+          <p class="password-rules">Mín. 8 caracteres · 1 mayúscula · 1 número · 1 símbolo especial</p>
+        </div>
+
+        <div class="form-group">
+          <label for="u-tenant">ID del hogar</label>
+          <input type="text" id="u-tenant"
+                 placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" required />
+          <small style="display:block; margin-top:4px;">
+            El dueño del hogar debe compartirte este ID.
+          </small>
+        </div>
+
+        <button type="submit" class="btn-full" id="btn-unirse">Unirme al hogar</button>
+      </form>
+    </div>
+
+    <div class="auth-footer">
+      ¿Ya tenés cuenta? <a href="/login">Ingresar</a>
+    </div>
+  </div>
+
+  <script>
+    const API = 'https://ladespensa-services.eliseo050595.workers.dev';
+
+    // ── Tabs ──────────────────────────────────────────────────────────────────
+    document.getElementById('tab-nuevo').addEventListener('click', () => switchTab('nuevo'));
+    document.getElementById('tab-unirse').addEventListener('click', () => switchTab('unirse'));
+
+    function switchTab(tab) {
+      ['nuevo', 'unirse'].forEach(t => {
+        document.getElementById(`tab-${t}`).classList.toggle('active', t === tab);
+        document.getElementById(`panel-${t}`).classList.toggle('active', t === tab);
+      });
+    }
+
+    // ── Formulario: Crear hogar ───────────────────────────────────────────────
+    document.getElementById('form-nuevo').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const errorBox = document.getElementById('error-nuevo');
+      errorBox.classList.remove('visible');
+
+      const email = document.getElementById('n-email').value.trim();
+      const password = document.getElementById('n-password').value;
+      const workspace_name = document.getElementById('n-workspace').value.trim();
+      const btn = document.getElementById('btn-nuevo');
+
+      if (!email || !password || !workspace_name) {
+        errorBox.textContent = 'Completá todos los campos.';
+        errorBox.classList.add('visible');
+        return;
+      }
+
+      btn.disabled = true;
+      btn.textContent = 'Creando…';
+
+      try {
+        const res = await fetch(`${API}/auth/register`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password, workspace_name }),
+        });
+
+        const data = await res.json();
+
+        if (!res.ok) {
+          errorBox.textContent = data?.error?.message || 'Error al crear la cuenta.';
+          errorBox.classList.add('visible');
+          return;
+        }
+
+        // Mostrar tenant_id al usuario
+        document.getElementById('tenant-id-display').textContent = data.data.tenant_id;
+        document.getElementById('form-nuevo').style.display = 'none';
+        document.getElementById('success-nuevo').classList.add('visible');
+
+      } catch (err) {
+        errorBox.textContent = 'No se pudo conectar con el servidor.';
+        errorBox.classList.add('visible');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Crear hogar';
+      }
+    });
+
+    // ── Formulario: Unirse a hogar ───────────────────────────────────────────
+    document.getElementById('form-unirse').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const errorBox = document.getElementById('error-unirse');
+      errorBox.classList.remove('visible');
+
+      const email = document.getElementById('u-email').value.trim();
+      const password = document.getElementById('u-password').value;
+      const tenant_id = document.getElementById('u-tenant').value.trim();
+      const btn = document.getElementById('btn-unirse');
+
+      if (!email || !password || !tenant_id) {
+        errorBox.textContent = 'Completá todos los campos.';
+        errorBox.classList.add('visible');
+        return;
+      }
+
+      btn.disabled = true;
+      btn.textContent = 'Uniéndome…';
+
+      try {
+        const res = await fetch(`${API}/auth/register`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password, tenant_id, role: 'member' }),
+        });
+
+        const data = await res.json();
+
+        if (!res.ok) {
+          errorBox.textContent = data?.error?.message || 'Error al unirse al hogar.';
+          errorBox.classList.add('visible');
+          return;
+        }
+
+        document.getElementById('form-unirse').style.display = 'none';
+        document.getElementById('success-unirse').classList.add('visible');
+
+      } catch (err) {
+        errorBox.textContent = 'No se pudo conectar con el servidor.';
+        errorBox.classList.add('visible');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Unirme al hogar';
+      }
+    });
+  </script>
+</BaseLayout>

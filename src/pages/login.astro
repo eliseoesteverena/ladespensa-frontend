@@ -1,0 +1,185 @@
+---
+// src/pages/login.astro
+// Página pública de inicio de sesión.
+import BaseLayout from '../layouts/BaseLayout.astro';
+---
+<BaseLayout title="Iniciar sesión">
+  <style>
+    body {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background-color: var(--gray-50);
+      padding: var(--space-4);
+    }
+
+    .auth-card {
+      background: var(--white);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: var(--space-8);
+      width: 100%;
+      max-width: 420px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+    }
+
+    .auth-card h1 {
+      font-size: var(--font-2xl);
+      margin-bottom: var(--space-1);
+    }
+
+    .auth-card p.subtitle {
+      color: var(--text-muted);
+      font-size: var(--font-sm);
+      margin-bottom: var(--space-6);
+    }
+
+    .form-group { margin-bottom: var(--space-4); }
+
+    .form-group label { margin-bottom: var(--space-1); }
+
+    .btn-full {
+      width: 100%;
+      justify-content: center;
+      margin-top: var(--space-2);
+    }
+
+    .error-msg {
+      background-color: #fef2f2;
+      border: 1px solid #fecaca;
+      border-radius: var(--radius-md);
+      color: #dc2626;
+      font-size: var(--font-sm);
+      padding: var(--space-3) var(--space-4);
+      margin-bottom: var(--space-4);
+      display: none;
+    }
+
+    .error-msg.visible { display: block; }
+
+    .auth-footer {
+      text-align: center;
+      margin-top: var(--space-6);
+      font-size: var(--font-sm);
+      color: var(--text-muted);
+    }
+
+    :root {
+      --accent: #16a34a;
+      --accent-dark: #15803d;
+      --accent-light: #dcfce7;
+    }
+  </style>
+
+  <div class="auth-card">
+    <h1>🥦 La Despensa</h1>
+    <p class="subtitle">Ingresá con tu cuenta para continuar.</p>
+
+    <div class="error-msg" id="error-box" role="alert"></div>
+
+    <form id="login-form" novalidate>
+      <div class="form-group">
+        <label for="email">Correo electrónico</label>
+        <input type="email" id="email" name="email"
+               placeholder="tu@correo.com" autocomplete="email" required />
+      </div>
+
+      <div class="form-group">
+        <label for="password">Contraseña</label>
+        <input type="password" id="password" name="password"
+               placeholder="••••••••" autocomplete="current-password" required />
+      </div>
+
+      <div class="form-group">
+        <label for="tenant_id">ID del hogar (tenant)</label>
+        <input type="text" id="tenant_id" name="tenant_id"
+               placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+               autocomplete="off" required />
+        <small style="margin-top:4px; display:block;">
+          Lo recibiste al registrarte. ¿No lo tenés? <a href="/register">Crear un hogar.</a>
+        </small>
+      </div>
+
+      <button type="submit" class="btn-full" id="btn-submit">
+        Ingresar
+      </button>
+    </form>
+
+    <div class="auth-footer">
+      ¿No tenés cuenta? <a href="/register">Registrarse</a>
+    </div>
+  </div>
+
+  <script>
+    const API = 'https://ladespensa-services.eliseo050595.workers.dev';
+
+    const form = document.getElementById('login-form');
+    const errorBox = document.getElementById('error-box');
+    const btnSubmit = document.getElementById('btn-submit');
+
+    function showError(msg) {
+      errorBox.textContent = msg;
+      errorBox.classList.add('visible');
+    }
+
+    function hideError() {
+      errorBox.classList.remove('visible');
+    }
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      hideError();
+
+      const email = document.getElementById('email').value.trim();
+      const password = document.getElementById('password').value;
+      const tenant_id = document.getElementById('tenant_id').value.trim();
+
+      if (!email || !password || !tenant_id) {
+        showError('Completá todos los campos.');
+        return;
+      }
+
+      btnSubmit.disabled = true;
+      btnSubmit.textContent = 'Ingresando…';
+
+      try {
+        const res = await fetch(`${API}/auth/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password, tenant_id }),
+        });
+
+        const data = await res.json();
+
+        if (!res.ok) {
+          const msg = data?.error?.message || 'Error al iniciar sesión.';
+          showError(msg);
+          return;
+        }
+
+        // Guardar tokens
+        localStorage.setItem('refreshToken', data.refreshToken);
+        localStorage.setItem('user', JSON.stringify(data.user));
+
+        // Guardar refreshToken en cookie para el middleware SSR
+        const maxAge = 30 * 24 * 60 * 60; // 30 días
+        document.cookie = `refreshToken=${data.refreshToken}; Max-Age=${maxAge}; path=/; SameSite=Strict`;
+
+        // Redirigir al dashboard
+        window.location.href = '/dashboard';
+
+      } catch (err) {
+        showError('No se pudo conectar con el servidor. Intentá más tarde.');
+      } finally {
+        btnSubmit.disabled = false;
+        btnSubmit.textContent = 'Ingresar';
+      }
+    });
+
+    // Si ya hay sesión, redirigir
+    if (localStorage.getItem('refreshToken')) {
+      window.location.href = '/dashboard';
+    }
+  </script>
+</BaseLayout>

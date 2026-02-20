@@ -1,0 +1,300 @@
+---
+// src/pages/dashboard.astro
+// Página protegida: panel principal.
+import AppLayout from '../layouts/AppLayout.astro';
+---
+<AppLayout title="Dashboard">
+  <style>
+    .page-header {
+      margin-bottom: var(--space-8);
+    }
+
+    .page-header h2 { margin-bottom: var(--space-1); }
+    .page-header p { color: var(--text-muted); margin: 0; }
+
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: var(--space-4);
+      margin-bottom: var(--space-8);
+    }
+
+    .stat-card {
+      background: var(--white);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: var(--space-4) var(--space-6);
+    }
+
+    .stat-card .stat-value {
+      font-size: var(--font-3xl);
+      font-weight: 700;
+      color: var(--gray-900);
+      display: block;
+    }
+
+    .stat-card .stat-label {
+      font-size: var(--font-sm);
+      color: var(--text-muted);
+    }
+
+    .stat-card.alert {
+      border-color: #fecaca;
+      background-color: #fef2f2;
+    }
+
+    .stat-card.alert .stat-value { color: #dc2626; }
+
+    .section-title {
+      font-size: var(--font-lg);
+      font-weight: 600;
+      margin-bottom: var(--space-4);
+      color: var(--gray-900);
+    }
+
+    .stock-list {
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+      margin-bottom: var(--space-8);
+    }
+
+    .stock-item {
+      display: flex;
+      align-items: center;
+      gap: var(--space-4);
+      padding: var(--space-3) var(--space-4);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .stock-item:last-child { border-bottom: none; }
+    .stock-item:hover { background-color: var(--gray-50); }
+
+    .stock-item .item-name { flex: 1; font-size: var(--font-sm); font-weight: 500; }
+    .stock-item .item-cat { font-size: var(--font-xs); color: var(--text-muted); }
+
+    .stock-item .item-qty {
+      font-size: var(--font-sm);
+      font-weight: 600;
+      color: var(--gray-700);
+      text-align: right;
+    }
+
+    .stock-item.low .item-qty { color: #dc2626; }
+
+    .stock-item .item-alert {
+      display: none;
+      background: #fef2f2;
+      color: #dc2626;
+      font-size: var(--font-xs);
+      padding: 0.1em 0.5em;
+      border-radius: 999px;
+      font-weight: 600;
+    }
+
+    .stock-item.low .item-alert { display: inline; }
+
+    .empty-state {
+      text-align: center;
+      padding: var(--space-12);
+      color: var(--text-muted);
+    }
+
+    .empty-state .emoji { font-size: 2.5rem; display: block; margin-bottom: var(--space-4); }
+
+    .loading {
+      color: var(--text-muted);
+      font-size: var(--font-sm);
+      padding: var(--space-4);
+    }
+
+    .quick-actions {
+      display: flex;
+      gap: var(--space-4);
+      flex-wrap: wrap;
+      margin-bottom: var(--space-8);
+    }
+  </style>
+
+  <div class="page-header">
+    <h2 id="greeting">Bienvenido</h2>
+    <p id="workspace-name">Cargando datos del hogar…</p>
+  </div>
+
+  <!-- Estadísticas rápidas -->
+  <div class="stats-grid" id="stats-grid">
+    <div class="stat-card">
+      <span class="stat-value" id="stat-total">–</span>
+      <span class="stat-label">Productos en stock</span>
+    </div>
+    <div class="stat-card alert" id="stat-alert-card">
+      <span class="stat-value" id="stat-alertas">–</span>
+      <span class="stat-label">Stock bajo</span>
+    </div>
+    <div class="stat-card">
+      <span class="stat-value" id="stat-compras">–</span>
+      <span class="stat-label">Compras registradas</span>
+    </div>
+  </div>
+
+  <!-- Acciones rápidas -->
+  <div class="quick-actions">
+    <a href="/stock"><button type="button">📦 Ver stock completo</button></a>
+    <a href="/compras"><button type="button" data-variant="secondary">🛒 Nueva compra</button></a>
+  </div>
+
+  <!-- Stock con alertas -->
+  <p class="section-title">⚠️ Items con stock bajo</p>
+  <div class="stock-list" id="alert-list">
+    <div class="loading">Cargando…</div>
+  </div>
+
+  <!-- Últimas compras -->
+  <p class="section-title">🛒 Últimas compras</p>
+  <div class="stock-list" id="compras-list">
+    <div class="loading">Cargando…</div>
+  </div>
+
+  <script>
+    const API = 'https://ladespensa-services.eliseo050595.workers.dev';
+
+    // ── Token management en cliente ───────────────────────────────────────────
+    let accessToken = null;
+
+    async function getToken() {
+      if (accessToken) return accessToken;
+      const rt = localStorage.getItem('refreshToken');
+      if (!rt) { window.location.href = '/login'; return null; }
+
+      const res = await fetch(`${API}/auth/refresh`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refresh_token: rt }),
+      });
+
+      if (!res.ok) {
+        localStorage.removeItem('refreshToken');
+        localStorage.removeItem('user');
+        window.location.href = '/login';
+        return null;
+      }
+
+      const data = await res.json();
+      accessToken = data.accessToken;
+      localStorage.setItem('refreshToken', data.refreshToken);
+      document.cookie = `refreshToken=${data.refreshToken}; Max-Age=${30*24*60*60}; path=/; SameSite=Strict`;
+      return accessToken;
+    }
+
+    async function apiFetch(path) {
+      const token = await getToken();
+      if (!token) return null;
+      const res = await fetch(`${API}${path}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.status === 401) {
+        accessToken = null;
+        return apiFetch(path);
+      }
+      return res.json();
+    }
+
+    // ── Greeting ──────────────────────────────────────────────────────────────
+    const user = JSON.parse(localStorage.getItem('user') || 'null');
+    const hour = new Date().getHours();
+    const greeting = hour < 12 ? 'Buenos días' : hour < 19 ? 'Buenas tardes' : 'Buenas noches';
+
+    if (user) {
+      document.getElementById('greeting').textContent =
+        `${greeting}${user.email ? ', ' + user.email.split('@')[0] : ''} 👋`;
+      document.getElementById('workspace-name').textContent =
+        `Hogar: ${user.tenantName || '–'}`;
+    }
+
+    // ── Cargar stock con alertas ──────────────────────────────────────────────
+    async function loadAlertStock() {
+      const data = await apiFetch('/stock?alertas=true');
+      const list = document.getElementById('alert-list');
+      const statAlertas = document.getElementById('stat-alertas');
+
+      if (!data || !data.success) {
+        list.innerHTML = '<div class="loading">Error al cargar.</div>';
+        return;
+      }
+
+      const items = data.data;
+      statAlertas.textContent = items.length;
+
+      if (items.length === 0) {
+        list.innerHTML = `
+          <div class="empty-state">
+            <span class="emoji">✅</span>
+            Todo el stock está al día.
+          </div>`;
+        document.getElementById('stat-alert-card').classList.remove('alert');
+        return;
+      }
+
+      // Mostrar badge en sidebar
+      const badge = document.getElementById('stock-alert-badge');
+      if (badge) { badge.style.display = 'inline'; badge.textContent = items.length; }
+
+      list.innerHTML = items.map(item => `
+        <div class="stock-item low">
+          <div>
+            <div class="item-name">${item.tipo_nombre}</div>
+            <div class="item-cat">${item.categoria_nombre || ''} · ${item.ubicacion || ''}</div>
+          </div>
+          <span class="item-alert">Stock bajo</span>
+          <div class="item-qty">${item.cantidad_disponible} ${item.unidad_simbolo}</div>
+        </div>
+      `).join('');
+    }
+
+    // ── Cargar total de stock ─────────────────────────────────────────────────
+    async function loadTotalStock() {
+      const data = await apiFetch('/stock');
+      if (data?.success) {
+        document.getElementById('stat-total').textContent = data.data.length;
+      }
+    }
+
+    // ── Cargar últimas compras ────────────────────────────────────────────────
+    async function loadCompras() {
+      const data = await apiFetch('/compras');
+      const list = document.getElementById('compras-list');
+
+      if (!data || !data.success) {
+        list.innerHTML = '<div class="loading">Error al cargar.</div>';
+        return;
+      }
+
+      const items = data.data.slice(0, 5); // últimas 5
+      document.getElementById('stat-compras').textContent = data.data.length;
+
+      if (items.length === 0) {
+        list.innerHTML = `
+          <div class="empty-state">
+            <span class="emoji">🛒</span>
+            Aún no registraste compras.
+          </div>`;
+        return;
+      }
+
+      list.innerHTML = items.map(c => `
+        <div class="stock-item">
+          <div>
+            <div class="item-name">${c.lugar_compra || 'Sin nombre'}</div>
+            <div class="item-cat">${new Date(c.fecha).toLocaleDateString('es-AR')}</div>
+          </div>
+          <div class="item-qty">$${(c.total || 0).toLocaleString('es-AR')}</div>
+        </div>
+      `).join('');
+    }
+
+    // ── Iniciar carga ─────────────────────────────────────────────────────────
+    loadAlertStock();
+    loadTotalStock();
+    loadCompras();
+  </script>
+</AppLayout>

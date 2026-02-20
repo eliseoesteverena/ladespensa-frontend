@@ -1,0 +1,344 @@
+---
+// src/layouts/AppLayout.astro
+// Layout para páginas protegidas. Incluye header + sidebar drawer + main.
+// Replica el patrón de index.html (checkbox CSS trick — sin JS para el menú).
+
+const { title = 'La Despensa' } = Astro.props;
+---
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{title} — La Despensa</title>
+  <link rel="stylesheet" href="/base.css" />
+  <style>
+    :root {
+      --accent:       #16a34a;
+      --accent-dark:  #15803d;
+      --accent-light: #dcfce7;
+    }
+
+    /* ── Layout general ── */
+    body {
+      padding-top: 56px;
+    }
+
+    /* ── Header fijo ── */
+    header {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      z-index: 100;
+      background-color: var(--white);
+      border-bottom: 1px solid var(--border);
+      padding: 0;
+    }
+
+    header > .container {
+      height: 56px;
+      display: flex;
+      align-items: center;
+      gap: var(--space-4);
+    }
+
+    .app-logo {
+      flex: 1;
+      font-weight: 700;
+      color: var(--gray-900);
+      text-decoration: none;
+      font-size: var(--font-lg);
+    }
+
+    .app-logo span { color: var(--accent); }
+
+    /* ── Hamburguesa (CSS trick) ── */
+    #menu-toggle {
+      position: absolute;
+      opacity: 0;
+      width: 0; height: 0;
+      pointer-events: none;
+    }
+
+    .hamburger {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      gap: 5px;
+      width: 36px; height: 36px;
+      padding: 6px;
+      cursor: pointer;
+      border-radius: var(--radius-md);
+      transition: background-color var(--transition);
+      flex-shrink: 0;
+    }
+
+    .hamburger:hover { background-color: var(--gray-100); }
+    .hamburger:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+    .hamburger span {
+      display: block;
+      height: 2px;
+      background-color: var(--gray-700);
+      border-radius: 2px;
+      transition: transform 0.25s ease, opacity 0.2s ease;
+      transform-origin: center;
+    }
+
+    #menu-toggle:checked ~ header .hamburger span:nth-child(1) {
+      transform: translateY(7px) rotate(45deg);
+    }
+    #menu-toggle:checked ~ header .hamburger span:nth-child(2) {
+      opacity: 0; transform: scaleX(0);
+    }
+    #menu-toggle:checked ~ header .hamburger span:nth-child(3) {
+      transform: translateY(-7px) rotate(-45deg);
+    }
+
+    /* ── Drawer sidebar ── */
+    #drawer {
+      position: fixed;
+      top: 56px; left: 0; bottom: 0;
+      width: 260px;
+      background-color: var(--white);
+      border-right: 1px solid var(--border);
+      padding: var(--space-6);
+      overflow-y: auto;
+      z-index: 90;
+      transform: translateX(-100%);
+      visibility: hidden;
+      transition: transform 0.25s ease, visibility 0.25s;
+    }
+
+    #menu-toggle:checked ~ #drawer {
+      transform: translateX(0);
+      visibility: visible;
+    }
+
+    /* ── Overlay ── */
+    #drawer-overlay {
+      display: block;
+      position: fixed;
+      inset: 56px 0 0 0;
+      background: rgba(0,0,0,0.3);
+      z-index: 80;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.25s;
+      cursor: default;
+    }
+
+    #menu-toggle:checked ~ #drawer-overlay {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    /* ── Navegación del sidebar ── */
+    #drawer nav ul { list-style: none; padding: 0; margin: 0; }
+
+    #drawer nav li { margin-bottom: var(--space-1); }
+
+    #drawer nav a {
+      display: flex;
+      align-items: center;
+      gap: var(--space-3);
+      padding: var(--space-2) var(--space-3);
+      border-radius: var(--radius-md);
+      color: var(--gray-700);
+      text-decoration: none;
+      font-size: var(--font-sm);
+      font-weight: 500;
+      transition: background-color var(--transition), color var(--transition);
+    }
+
+    #drawer nav a:hover {
+      background-color: var(--accent-light);
+      color: var(--accent-dark);
+    }
+
+    #drawer nav a[aria-current="page"] {
+      background-color: var(--accent-light);
+      color: var(--accent-dark);
+      font-weight: 600;
+    }
+
+    .nav-icon { font-size: 1.1em; }
+
+    .sidebar-section-title {
+      font-size: var(--font-xs);
+      font-weight: 600;
+      color: var(--gray-400);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      padding: var(--space-4) var(--space-3) var(--space-2);
+    }
+
+    .sidebar-user {
+      padding: var(--space-3);
+      border-top: 1px solid var(--border);
+      margin-top: var(--space-4);
+    }
+
+    .sidebar-user strong {
+      display: block;
+      font-size: var(--font-sm);
+      color: var(--gray-900);
+    }
+
+    .sidebar-user small {
+      color: var(--text-muted);
+      font-size: var(--font-xs);
+    }
+
+    /* ── Contenido principal ── */
+    main {
+      padding: var(--space-8) 0;
+    }
+
+    /* ── Badge de alerta ── */
+    .badge {
+      display: inline-block;
+      padding: 0.1em 0.5em;
+      border-radius: 999px;
+      font-size: var(--font-xs);
+      font-weight: 600;
+      background-color: #fef2f2;
+      color: #dc2626;
+      margin-left: auto;
+    }
+  </style>
+</head>
+<body>
+  <a href="#main" class="skip-link">Saltar al contenido</a>
+
+  <!-- Checkbox de estado — debe ser hermano anterior de header, drawer y overlay -->
+  <input type="checkbox" id="menu-toggle" aria-hidden="true" />
+
+  <!-- ░░ HEADER ░░ -->
+  <header>
+    <div class="container">
+      <label for="menu-toggle" class="hamburger" role="button" tabindex="0"
+             aria-label="Abrir menú de navegación">
+        <span></span><span></span><span></span>
+      </label>
+
+      <a href="/dashboard" class="app-logo">La <span>Despensa</span></a>
+
+      <div id="header-user" style="font-size: var(--font-sm); color: var(--text-muted);">
+        <!-- Nombre del usuario — llenado por JS del cliente -->
+      </div>
+    </div>
+  </header>
+
+  <!-- ░░ DRAWER ░░ -->
+  <aside id="drawer" aria-label="Menú lateral">
+
+    <div class="sidebar-section-title">Principal</div>
+    <nav aria-label="Navegación principal">
+      <ul>
+        <li>
+          <a href="/dashboard" id="nav-dashboard">
+            <span class="nav-icon">🏠</span> Dashboard
+          </a>
+        </li>
+        <li>
+          <a href="/stock" id="nav-stock">
+            <span class="nav-icon">📦</span> Stock
+            <span class="badge" id="stock-alert-badge" style="display:none">!</span>
+          </a>
+        </li>
+        <li>
+          <a href="/compras" id="nav-compras">
+            <span class="nav-icon">🛒</span> Compras
+          </a>
+        </li>
+      </ul>
+    </nav>
+
+    <div class="sidebar-section-title">Cuenta</div>
+    <nav aria-label="Cuenta">
+      <ul>
+        <li>
+          <a href="/configuracion" id="nav-config">
+            <span class="nav-icon">⚙️</span> Configuración
+          </a>
+        </li>
+      </ul>
+    </nav>
+
+    <div class="sidebar-user" id="sidebar-user-info">
+      <!-- Llenado por JS -->
+    </div>
+
+    <div style="margin-top: var(--space-4);">
+      <button type="button" data-variant="ghost" id="btn-logout"
+              style="width:100%; justify-content:center;">
+        Cerrar sesión
+      </button>
+    </div>
+
+  </aside>
+
+  <!-- Overlay cierra el menú al hacer clic afuera -->
+  <label for="menu-toggle" id="drawer-overlay" aria-hidden="true"></label>
+
+  <!-- ░░ MAIN ░░ -->
+  <main id="main">
+    <div class="container">
+      <slot />
+    </div>
+  </main>
+
+  <script>
+    // ── Marcar enlace activo ──────────────────────────────────────────────────
+    const path = window.location.pathname;
+    const navMap = {
+      '/dashboard': 'nav-dashboard',
+      '/stock': 'nav-stock',
+      '/compras': 'nav-compras',
+      '/configuracion': 'nav-config',
+    };
+
+    Object.entries(navMap).forEach(([route, id]) => {
+      if (path.startsWith(route)) {
+        document.getElementById(id)?.setAttribute('aria-current', 'page');
+      }
+    });
+
+    // ── Rellenar info del usuario desde localStorage ───────────────────────
+    const user = JSON.parse(localStorage.getItem('user') || 'null');
+
+    if (user) {
+      document.getElementById('header-user').textContent = user.tenantName || '';
+
+      document.getElementById('sidebar-user-info').innerHTML = `
+        <strong>${user.email}</strong>
+        <small>${user.role} · ${user.tenantName || ''}</small>
+      `;
+    }
+
+    // ── Logout ────────────────────────────────────────────────────────────────
+    document.getElementById('btn-logout').addEventListener('click', async () => {
+      const { auth } = await import('/src/lib/api.js').catch(() => ({ auth: null }));
+
+      // Limpiar tokens locales
+      localStorage.removeItem('refreshToken');
+      localStorage.removeItem('user');
+
+      // Llamar al backend (best-effort)
+      try {
+        const rt = localStorage.getItem('refreshToken');
+        if (rt) {
+          await fetch('https://ladespensa-services.eliseo050595.workers.dev/auth/logout', {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${window.__accessToken || ''}` }
+          });
+        }
+      } catch (_) {}
+
+      // Limpiar cookie del servidor y redirigir
+      document.cookie = 'refreshToken=; Max-Age=0; path=/';
+      window.location.href = '/login';
+    });
+  </script>
+</body>
+</html>

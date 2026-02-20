@@ -1,0 +1,154 @@
+---
+// src/pages/stock.astro
+// Página protegida: listado de stock del hogar.
+import AppLayout from '../layouts/AppLayout.astro';
+---
+<AppLayout title="Stock">
+  <style>
+    .page-header { margin-bottom: var(--space-6); }
+    .page-header h2 { margin-bottom: var(--space-1); }
+    .page-header p { color: var(--text-muted); margin: 0; }
+
+    .toolbar {
+      display: flex;
+      gap: var(--space-4);
+      align-items: center;
+      flex-wrap: wrap;
+      margin-bottom: var(--space-6);
+    }
+
+    .toolbar input[type="search"] {
+      flex: 1;
+      min-width: 200px;
+    }
+
+    .stock-table-wrap { overflow-x: auto; }
+
+    table { width: 100%; border-collapse: collapse; font-size: var(--font-sm); }
+    thead { background: var(--gray-50); border-bottom: 2px solid var(--border); }
+    th { padding: var(--space-3) var(--space-4); text-align: left; font-weight: 600; color: var(--gray-700); font-size: var(--font-xs); text-transform: uppercase; letter-spacing: 0.05em; }
+    td { padding: var(--space-3) var(--space-4); border-bottom: 1px solid var(--border); color: var(--gray-700); }
+    tbody tr:hover { background: var(--gray-50); }
+    tbody tr:last-child td { border-bottom: none; }
+
+    .qty-low { color: #dc2626; font-weight: 600; }
+    .badge-low { background: #fef2f2; color: #dc2626; font-size: var(--font-xs); padding: 0.1em 0.5em; border-radius: 999px; font-weight: 600; }
+
+    .loading { color: var(--text-muted); font-size: var(--font-sm); padding: var(--space-8); text-align: center; }
+    .empty { text-align: center; padding: var(--space-12); color: var(--text-muted); }
+  </style>
+
+  <div class="page-header">
+    <h2>📦 Stock</h2>
+    <p>Inventario completo del hogar.</p>
+  </div>
+
+  <div class="toolbar">
+    <input type="search" id="search" placeholder="Buscar producto…" />
+    <label style="display:flex; align-items:center; gap:var(--space-2); font-size:var(--font-sm);">
+      <input type="checkbox" id="filter-alertas" />
+      Solo stock bajo
+    </label>
+  </div>
+
+  <div class="stock-table-wrap">
+    <table id="stock-table">
+      <thead>
+        <tr>
+          <th>Producto</th>
+          <th>Categoría</th>
+          <th>Cantidad</th>
+          <th>Mín.</th>
+          <th>Ubicación</th>
+          <th>Vence</th>
+        </tr>
+      </thead>
+      <tbody id="stock-body">
+        <tr><td colspan="6" class="loading">Cargando…</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <script>
+    const API = 'https://ladespensa-services.eliseo050595.workers.dev';
+    let accessToken = null;
+    let allItems = [];
+
+    async function getToken() {
+      if (accessToken) return accessToken;
+      const rt = localStorage.getItem('refreshToken');
+      if (!rt) { window.location.href = '/login'; return null; }
+      const res = await fetch(`${API}/auth/refresh`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refresh_token: rt }),
+      });
+      if (!res.ok) { window.location.href = '/login'; return null; }
+      const data = await res.json();
+      accessToken = data.accessToken;
+      localStorage.setItem('refreshToken', data.refreshToken);
+      document.cookie = `refreshToken=${data.refreshToken}; Max-Age=${30*24*60*60}; path=/; SameSite=Strict`;
+      return accessToken;
+    }
+
+    async function apiFetch(path) {
+      const token = await getToken();
+      if (!token) return null;
+      const res = await fetch(`${API}${path}`, { headers: { 'Authorization': `Bearer ${token}` } });
+      if (res.status === 401) { accessToken = null; return apiFetch(path); }
+      return res.json();
+    }
+
+    function renderTable(items) {
+      const tbody = document.getElementById('stock-body');
+      if (!items.length) {
+        tbody.innerHTML = '<tr><td colspan="6" class="empty">Sin resultados.</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = items.map(item => {
+        const isLow = item.cantidad_disponible <= item.stock_minimo;
+        return `
+          <tr>
+            <td>
+              ${item.tipo_nombre}
+              ${isLow ? '<span class="badge-low">Bajo</span>' : ''}
+            </td>
+            <td>${item.categoria_nombre || '–'}</td>
+            <td class="${isLow ? 'qty-low' : ''}">${item.cantidad_disponible} ${item.unidad_simbolo}</td>
+            <td>${item.stock_minimo} ${item.unidad_simbolo}</td>
+            <td>${item.ubicacion || '–'}</td>
+            <td>${item.fecha_vencimiento || '–'}</td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    function filterAndRender() {
+      const query = document.getElementById('search').value.toLowerCase();
+      const onlyAlerts = document.getElementById('filter-alertas').checked;
+
+      let items = allItems;
+      if (query) items = items.filter(i => i.tipo_nombre.toLowerCase().includes(query));
+      if (onlyAlerts) items = items.filter(i => i.cantidad_disponible <= i.stock_minimo);
+
+      renderTable(items);
+    }
+
+    async function loadStock() {
+      const data = await apiFetch('/stock');
+      if (!data?.success) {
+        document.getElementById('stock-body').innerHTML =
+          '<tr><td colspan="6" class="loading">Error al cargar.</td></tr>';
+        return;
+      }
+      allItems = data.data;
+      renderTable(allItems);
+    }
+
+    document.getElementById('search').addEventListener('input', filterAndRender);
+    document.getElementById('filter-alertas').addEventListener('change', filterAndRender);
+
+    loadStock();
+  </script>
+</AppLayout>
