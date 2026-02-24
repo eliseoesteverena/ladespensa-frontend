@@ -1,6 +1,5 @@
 ---
 // src/pages/compras.astro
-// Página protegida: historial de compras.
 import AppLayout from '../layouts/AppLayout.astro';
 ---
 <AppLayout title="Compras">
@@ -9,33 +8,16 @@ import AppLayout from '../layouts/AppLayout.astro';
     .page-header h2 { margin-bottom: var(--space-1); }
     .page-header p { color: var(--text-muted); margin: 0; }
 
-    .compras-list {
-      border: 1px solid var(--border);
-      border-radius: var(--radius-lg);
-      overflow: hidden;
-    }
-
-    .compra-item {
-      display: flex;
-      align-items: center;
-      gap: var(--space-4);
-      padding: var(--space-4);
-      border-bottom: 1px solid var(--border);
-      text-decoration: none;
-      color: inherit;
-      transition: background-color var(--transition);
-    }
-
-    .compra-item:last-child { border-bottom: none; }
-    .compra-item:hover { background: var(--gray-50); }
-
-    .compra-info { flex: 1; }
-    .compra-info strong { display: block; font-size: var(--font-sm); }
-    .compra-info small { color: var(--text-muted); font-size: var(--font-xs); }
-
-    .compra-total { font-weight: 700; font-size: var(--font-base); color: var(--gray-900); }
-
+    .list { border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; }
+    .row { display: flex; align-items: center; gap: var(--space-4); padding: var(--space-4); border-bottom: 1px solid var(--border); }
+    .row:last-child { border-bottom: none; }
+    .row:hover { background: var(--gray-50); }
+    .info { flex: 1; }
+    .info strong { display: block; font-size: var(--font-sm); }
+    .info small { color: var(--text-muted); font-size: var(--font-xs); }
+    .total { font-weight: 700; font-size: var(--font-base); }
     .empty { text-align: center; padding: var(--space-12); color: var(--text-muted); }
+    .empty .icon { font-size: 2rem; display: block; margin-bottom: var(--space-3); }
     .loading { text-align: center; padding: var(--space-8); color: var(--text-muted); font-size: var(--font-sm); }
   </style>
 
@@ -44,67 +26,29 @@ import AppLayout from '../layouts/AppLayout.astro';
     <p>Historial de compras del hogar.</p>
   </div>
 
-  <div class="compras-list" id="compras-list">
+  <div class="list" id="list">
     <div class="loading">Cargando…</div>
   </div>
 
-  <script>
-    const API = 'https://ladespensa-services.eliseo050595.workers.dev';
-    let accessToken = null;
+  <script type="module">
+    import { apiFetch } from '/src/lib/auth-client.js';
 
-    async function getToken() {
-      if (accessToken) return accessToken;
-      const rt = localStorage.getItem('refreshToken');
-      if (!rt) { window.location.href = '/login'; return null; }
-      const res = await fetch(`${API}/auth/refresh`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ refresh_token: rt }),
-      });
-      if (!res.ok) { window.location.href = '/login'; return null; }
-      const data = await res.json();
-      accessToken = data.accessToken;
-      localStorage.setItem('refreshToken', data.refreshToken);
-      document.cookie = `refreshToken=${data.refreshToken}; Max-Age=${30*24*60*60}; path=/; SameSite=Strict`;
-      return accessToken;
-    }
+    const list = document.getElementById('list');
+    const data = await apiFetch('/compras');
 
-    async function apiFetch(path) {
-      const token = await getToken();
-      if (!token) return null;
-      const res = await fetch(`${API}${path}`, { headers: { 'Authorization': `Bearer ${token}` } });
-      if (res.status === 401) { accessToken = null; return apiFetch(path); }
-      return res.json();
-    }
-
-    async function loadCompras() {
-      const data = await apiFetch('/compras');
-      const list = document.getElementById('compras-list');
-
-      if (!data?.success) {
-        list.innerHTML = '<div class="loading">Error al cargar.</div>';
-        return;
-      }
-
-      if (!data.data.length) {
-        list.innerHTML = `<div class="empty">
-          <span style="font-size:2rem; display:block; margin-bottom:1rem;">🛒</span>
-          Aún no registraste ninguna compra.
-        </div>`;
-        return;
-      }
-
+    if (!data?.success) {
+      list.innerHTML = '<div class="loading">Error al cargar las compras.</div>';
+    } else if (!data.data.length) {
+      list.innerHTML = '<div class="empty"><span class="icon">🛒</span>Aún no registraste ninguna compra.</div>';
+    } else {
       list.innerHTML = data.data.map(c => `
-        <div class="compra-item">
-          <div class="compra-info">
+        <div class="row">
+          <div class="info">
             <strong>${c.lugar_compra || 'Sin nombre'}</strong>
-            <small>${new Date(c.fecha).toLocaleDateString('es-AR', { year: 'numeric', month: 'long', day: 'numeric' })}</small>
+            <small>${new Date(c.fecha).toLocaleDateString('es-AR', { year:'numeric', month:'long', day:'numeric' })}</small>
           </div>
-          <div class="compra-total">$${(c.total || 0).toLocaleString('es-AR')}</div>
-        </div>
-      `).join('');
+          <div class="total">$${(c.total || 0).toLocaleString('es-AR')}</div>
+        </div>`).join('');
     }
-
-    loadCompras();
   </script>
 </AppLayout>

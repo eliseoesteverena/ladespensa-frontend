@@ -288,56 +288,35 @@ const { title = 'La Despensa' } = Astro.props;
     </div>
   </main>
 
-  <script>
+  <script type="module">
     // ── Marcar enlace activo ──────────────────────────────────────────────────
     const path = window.location.pathname;
     const navMap = {
-      '/dashboard': 'nav-dashboard',
-      '/stock': 'nav-stock',
-      '/compras': 'nav-compras',
+      '/dashboard':     'nav-dashboard',
+      '/stock':         'nav-stock',
+      '/compras':       'nav-compras',
       '/configuracion': 'nav-config',
     };
-
     Object.entries(navMap).forEach(([route, id]) => {
-      if (path.startsWith(route)) {
-        document.getElementById(id)?.setAttribute('aria-current', 'page');
-      }
+      if (path.startsWith(route)) document.getElementById(id)?.setAttribute('aria-current', 'page');
     });
 
-    // ── Rellenar info del usuario desde localStorage ───────────────────────
+    // ── Rellenar info del usuario desde localStorage ──────────────────────────
     const user = JSON.parse(localStorage.getItem('user') || 'null');
-
     if (user) {
       document.getElementById('header-user').textContent = user.tenantName || '';
-
       document.getElementById('sidebar-user-info').innerHTML = `
-        <strong>${user.email}</strong>
-        <small>${user.role} · ${user.tenantName || ''}</small>
+        <strong>${user.email || ''}</strong>
+        <small>${user.role || ''} · ${user.tenantName || ''}</small>
       `;
     }
 
     // ── Logout ────────────────────────────────────────────────────────────────
-    document.getElementById('btn-logout').addEventListener('click', async () => {
-      const { auth } = await import('/src/lib/api.js').catch(() => ({ auth: null }));
-
-      // Limpiar tokens locales
+    document.getElementById('btn-logout').addEventListener('click', () => {
       localStorage.removeItem('refreshToken');
       localStorage.removeItem('user');
-
-      // Llamar al backend (best-effort)
-      try {
-        const rt = localStorage.getItem('refreshToken');
-        if (rt) {
-          await fetch('https://ladespensa-services.eliseo050595.workers.dev/auth/logout', {
-            method: 'POST',
-            headers: { 'Authorization': `Bearer ${window.__accessToken || ''}` }
-          });
-        }
-      } catch (_) {}
-
-      // Limpiar cookie del servidor y redirigir
       document.cookie = 'refreshToken=; Max-Age=0; path=/';
-      window.location.href = '/login';
+      window.location.replace('/login');
     });
   </script>
 </body>
