@@ -1,10 +1,16 @@
 ---
 // src/pages/login.astro
-// Página pública de inicio de sesión.
+// Página pública. El backend ya NO requiere tenant_id.
+// Si el usuario tiene múltiples hogares → 409 con selector de nombre.
 import BaseLayout from '../layouts/BaseLayout.astro';
 ---
 <BaseLayout title="Iniciar sesión">
   <style>
+    :root {
+      --accent:       #16a34a;
+      --accent-dark:  #15803d;
+      --accent-light: #dcfce7;
+    }
     body {
       min-height: 100vh;
       display: flex;
@@ -13,173 +19,164 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       background-color: var(--gray-50);
       padding: var(--space-4);
     }
-
     .auth-card {
       background: var(--white);
       border: 1px solid var(--border);
       border-radius: var(--radius-lg);
       padding: var(--space-8);
       width: 100%;
-      max-width: 420px;
+      max-width: 400px;
       box-shadow: 0 1px 4px rgba(0,0,0,0.06);
     }
-
-    .auth-card h1 {
-      font-size: var(--font-2xl);
-      margin-bottom: var(--space-1);
-    }
-
-    .auth-card p.subtitle {
-      color: var(--text-muted);
-      font-size: var(--font-sm);
-      margin-bottom: var(--space-6);
-    }
-
+    .auth-logo { font-size: var(--font-2xl); font-weight: 700; margin-bottom: var(--space-1); }
+    .auth-logo span { color: var(--accent); }
+    .auth-subtitle { color: var(--text-muted); font-size: var(--font-sm); margin-bottom: var(--space-6); }
     .form-group { margin-bottom: var(--space-4); }
-
-    .form-group label { margin-bottom: var(--space-1); }
-
-    .btn-full {
-      width: 100%;
-      justify-content: center;
-      margin-top: var(--space-2);
-    }
-
-    .error-msg {
-      background-color: #fef2f2;
-      border: 1px solid #fecaca;
-      border-radius: var(--radius-md);
-      color: #dc2626;
-      font-size: var(--font-sm);
+    .btn-full { width: 100%; justify-content: center; margin-top: var(--space-2); padding: var(--space-3) var(--space-6); font-size: var(--font-base); }
+    .alert-box { border-radius: var(--radius-md); font-size: var(--font-sm); padding: var(--space-3) var(--space-4); margin-bottom: var(--space-4); display: none; }
+    .alert-box.visible { display: block; }
+    .alert-box.error { background: #fef2f2; border: 1px solid #fecaca; color: #dc2626; }
+    .alert-box.info  { background: var(--accent-light); border: 1px solid #bbf7d0; color: var(--accent-dark); }
+    #workspace-selector { display: none; margin-bottom: var(--space-4); }
+    #workspace-selector.visible { display: block; }
+    .ws-label { font-size: var(--font-sm); font-weight: 600; color: var(--gray-700); margin-bottom: var(--space-3); }
+    .ws-option {
+      display: flex; align-items: center; gap: var(--space-3);
       padding: var(--space-3) var(--space-4);
-      margin-bottom: var(--space-4);
-      display: none;
+      border: 1px solid var(--border); border-radius: var(--radius-md);
+      margin-bottom: var(--space-2); cursor: pointer;
+      transition: border-color var(--transition), background-color var(--transition);
     }
-
-    .error-msg.visible { display: block; }
-
-    .auth-footer {
-      text-align: center;
-      margin-top: var(--space-6);
-      font-size: var(--font-sm);
-      color: var(--text-muted);
-    }
-
-    :root {
-      --accent: #16a34a;
-      --accent-dark: #15803d;
-      --accent-light: #dcfce7;
-    }
+    .ws-option:hover { border-color: var(--accent); background-color: var(--accent-light); }
+    .ws-option label { cursor: pointer; font-size: var(--font-sm); font-weight: 500; margin: 0; }
+    .auth-footer { text-align: center; margin-top: var(--space-6); font-size: var(--font-sm); color: var(--text-muted); }
   </style>
 
   <div class="auth-card">
-    <h1>🥦 La Despensa</h1>
-    <p class="subtitle">Ingresá con tu cuenta para continuar.</p>
+    <p class="auth-logo">La <span>Despensa</span> 🥦</p>
+    <p class="auth-subtitle">Ingresá con tu cuenta para continuar.</p>
 
-    <div class="error-msg" id="error-box" role="alert"></div>
+    <div class="alert-box" id="alert-box" role="alert"></div>
 
     <form id="login-form" novalidate>
       <div class="form-group">
         <label for="email">Correo electrónico</label>
-        <input type="email" id="email" name="email"
-               placeholder="tu@correo.com" autocomplete="email" required />
+        <input type="email" id="email" placeholder="tu@correo.com"
+               autocomplete="email" inputmode="email" required />
       </div>
 
       <div class="form-group">
         <label for="password">Contraseña</label>
-        <input type="password" id="password" name="password"
-               placeholder="••••••••" autocomplete="current-password" required />
+        <input type="password" id="password" placeholder="••••••••"
+               autocomplete="current-password" required />
       </div>
 
-      <div class="form-group">
-        <label for="tenant_id">ID del hogar (tenant)</label>
-        <input type="text" id="tenant_id" name="tenant_id"
-               placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-               autocomplete="off" required />
-        <small style="margin-top:4px; display:block;">
-          Lo recibiste al registrarte. ¿No lo tenés? <a href="/register">Crear un hogar.</a>
-        </small>
+      <!-- Aparece solo si el email tiene múltiples hogares -->
+      <div id="workspace-selector">
+        <p class="ws-label">¿A cuál hogar querés ingresar?</p>
+        <div id="ws-options"></div>
       </div>
 
-      <button type="submit" class="btn-full" id="btn-submit">
-        Ingresar
-      </button>
+      <button type="submit" class="btn-full" id="btn-submit">Ingresar</button>
     </form>
 
     <div class="auth-footer">
-      ¿No tenés cuenta? <a href="/register">Registrarse</a>
+      ¿No tenés cuenta? <a href="/register">Crear cuenta</a>
     </div>
   </div>
 
   <script>
     const API = 'https://ladespensa-services.eliseo050595.workers.dev';
 
-    const form = document.getElementById('login-form');
-    const errorBox = document.getElementById('error-box');
-    const btnSubmit = document.getElementById('btn-submit');
-
-    function showError(msg) {
-      errorBox.textContent = msg;
-      errorBox.classList.add('visible');
+    // Redirigir si ya hay sesión
+    if (localStorage.getItem('refreshToken')) {
+      window.location.replace('/dashboard');
     }
 
-    function hideError() {
-      errorBox.classList.remove('visible');
+    const alertBox   = document.getElementById('alert-box');
+    const btnSubmit  = document.getElementById('btn-submit');
+    const wsSel      = document.getElementById('workspace-selector');
+    const wsOpts     = document.getElementById('ws-options');
+    let pendingMulti = false;
+
+    function showAlert(type, msg) {
+      alertBox.className = `alert-box ${type} visible`;
+      alertBox.textContent = msg;
     }
 
-    form.addEventListener('submit', async (e) => {
+    function setLoading(on) {
+      btnSubmit.disabled = on;
+      btnSubmit.textContent = on ? 'Ingresando…' : 'Ingresar';
+    }
+
+    function buildWorkspaceSelector(workspaces) {
+      pendingMulti = true;
+      wsOpts.innerHTML = workspaces.map((name, i) => `
+        <div class="ws-option" onclick="document.getElementById('ws${i}').checked=true">
+          <input type="radio" id="ws${i}" name="workspace_name" value="${name}" ${i===0?'checked':''} />
+          <label for="ws${i}">🏠 ${name}</label>
+        </div>
+      `).join('');
+      wsSel.classList.add('visible');
+      showAlert('info', 'Tu cuenta pertenece a más de un hogar. Seleccioná uno para continuar.');
+    }
+
+    document.getElementById('login-form').addEventListener('submit', async (e) => {
       e.preventDefault();
-      hideError();
+      alertBox.classList.remove('visible');
 
-      const email = document.getElementById('email').value.trim();
+      const email    = document.getElementById('email').value.trim();
       const password = document.getElementById('password').value;
-      const tenant_id = document.getElementById('tenant_id').value.trim();
 
-      if (!email || !password || !tenant_id) {
-        showError('Completá todos los campos.');
+      if (!email || !password) {
+        showAlert('error', 'Completá tu email y contraseña.');
         return;
       }
 
-      btnSubmit.disabled = true;
-      btnSubmit.textContent = 'Ingresando…';
+      const body = { email, password };
+
+      if (pendingMulti) {
+        const checked = wsOpts.querySelector('input[name="workspace_name"]:checked');
+        if (!checked) { showAlert('error', 'Seleccioná un hogar.'); return; }
+        body.workspace_name = checked.value;
+      }
+
+      setLoading(true);
 
       try {
-        const res = await fetch(`${API}/auth/login`, {
+        const res  = await fetch(`${API}/auth/login`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email, password, tenant_id }),
+          body: JSON.stringify(body),
         });
-
         const data = await res.json();
 
-        if (!res.ok) {
-          const msg = data?.error?.message || 'Error al iniciar sesión.';
-          showError(msg);
+        // Múltiples hogares
+        if (res.status === 409 && data?.error?.code === 'CONFLICT') {
+          const workspaces = data.error?.details?.workspaces;
+          if (Array.isArray(workspaces)) { buildWorkspaceSelector(workspaces); }
+          setLoading(false);
           return;
         }
 
-        // Guardar tokens
+        if (!res.ok) {
+          showAlert('error', data?.error?.message || 'Email o contraseña incorrectos.');
+          setLoading(false);
+          return;
+        }
+
+        // Éxito — guardar tokens
         localStorage.setItem('refreshToken', data.refreshToken);
         localStorage.setItem('user', JSON.stringify(data.user));
-
-        // Guardar refreshToken en cookie para el middleware SSR
-        const maxAge = 30 * 24 * 60 * 60; // 30 días
+        const maxAge = 30 * 24 * 60 * 60;
         document.cookie = `refreshToken=${data.refreshToken}; Max-Age=${maxAge}; path=/; SameSite=Strict`;
-
-        // Redirigir al dashboard
-        window.location.href = '/dashboard';
+        window.location.replace('/dashboard');
 
       } catch (err) {
-        showError('No se pudo conectar con el servidor. Intentá más tarde.');
-      } finally {
-        btnSubmit.disabled = false;
-        btnSubmit.textContent = 'Ingresar';
+        console.error('[login]', err);
+        showAlert('error', 'No se pudo conectar con el servidor.');
+        setLoading(false);
       }
     });
-
-    // Si ya hay sesión, redirigir
-    if (localStorage.getItem('refreshToken')) {
-      window.location.href = '/dashboard';
-    }
   </script>
 </BaseLayout>
