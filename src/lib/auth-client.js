@@ -3,6 +3,7 @@
  * Helper de autenticación para el lado CLIENTE (browser).
  * Importar con: import { getToken, apiFetch } from '/src/lib/auth-client.js'
  *
+ * 
  * Soluciona:
  * - Evita código duplicado de getToken() en cada página
  * - Previene redirect loops: solo redirige a /login si NO estamos ya en /login
