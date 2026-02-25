@@ -1,23 +1,27 @@
 /**
  * src/lib/auth-client.js
- * Helper de autenticación para el lado CLIENTE (browser).
  *
- * PROBLEMA RESUELTO: "refresh race condition"
- * Cuando múltiples apiFetch() se disparan en paralelo (ej: dashboard carga
- * /stock, /stock?alertas=true y /compras al mismo tiempo), todas detectan
- * que no hay accessToken y llaman a getToken() simultáneamente.
- * Con rotación de refresh tokens, el primer refresh invalida el refreshToken
- * que usan los siguientes → 401 → forceLogout() → cierre de sesión falso.
+ * PROBLEMA: Las 3 llamadas paralelas (stock, compras, stock?alertas) llegan
+ * a doRefresh() en el mismo tick. Aunque asignamos _refreshPromise, JS es
+ * single-thread pero las asignaciones y los checks ocurren antes de que el
+ * event loop procese el primer await — por eso el singleton "no funcionaba".
  *
- * SOLUCIÓN: Singleton de refresh (_refreshPromise).
- * Si ya hay un refresh en vuelo, todas las llamadas esperan ESE MISMO
- * promise en lugar de lanzar uno propio.
+ * SOLUCIÓN: Guardar el estado en window.__despensa para que sea un singleton
+ * verdadero del contexto global del browser (no del módulo ES), que sí es
+ * compartido de forma síncrona entre todas las importaciones del módulo.
  */
 
 const API = 'https://ladespensa-services.eliseo050595.workers.dev';
 
-let _accessToken = null;
-let _refreshPromise = null; // singleton: solo un refresh a la vez
+// Namespace global — persiste mientras la pestaña esté abierta
+if (!window.__despensa) {
+  window.__despensa = {
+    accessToken: null,
+    refreshPromise: null,
+  };
+}
+
+const state = window.__despensa;
 
 function persistRefreshCookie(token) {
   const maxAge = 30 * 24 * 60 * 60;
@@ -25,8 +29,8 @@ function persistRefreshCookie(token) {
 }
 
 function forceLogout() {
-  _accessToken = null;
-  _refreshPromise = null;
+  state.accessToken = null;
+  state.refreshPromise = null;
   localStorage.removeItem('refreshToken');
   localStorage.removeItem('user');
   document.cookie = 'refreshToken=; Max-Age=0; path=/';
@@ -35,17 +39,13 @@ function forceLogout() {
   }
 }
 
-/** Ejecuta UN SOLO refresh aunque se llame N veces en paralelo */
 function doRefresh() {
-  // Si ya hay uno en curso, devolver el mismo promise
-  if (_refreshPromise) return _refreshPromise;
+  // Si ya hay un refresh en vuelo, todas las llamadas comparten este mismo promise
+  if (state.refreshPromise) return state.refreshPromise;
   
-  _refreshPromise = (async () => {
+  state.refreshPromise = (async () => {
     const rt = localStorage.getItem('refreshToken');
-    if (!rt) {
-      forceLogout();
-      return null;
-    }
+    if (!rt) { forceLogout(); return null; }
     
     try {
       const res = await fetch(`${API}/auth/refresh`, {
@@ -54,32 +54,28 @@ function doRefresh() {
         body: JSON.stringify({ refresh_token: rt }),
       });
       
-      if (!res.ok) {
-        forceLogout();
-        return null;
-      }
+      if (!res.ok) { forceLogout(); return null; }
       
       const data = await res.json();
-      _accessToken = data.accessToken;
+      state.accessToken = data.accessToken;
       localStorage.setItem('refreshToken', data.refreshToken);
       persistRefreshCookie(data.refreshToken);
-      return _accessToken;
+      return state.accessToken;
       
     } catch (err) {
       console.error('[auth] refresh error:', err);
       forceLogout();
       return null;
     } finally {
-      // Limpiar el singleton al terminar (éxito o error)
-      _refreshPromise = null;
+      state.refreshPromise = null; // liberar para próximos refreshes
     }
   })();
   
-  return _refreshPromise;
+  return state.refreshPromise;
 }
 
 export async function getToken() {
-  if (_accessToken) return _accessToken;
+  if (state.accessToken) return state.accessToken;
   return doRefresh();
 }
 
@@ -96,24 +92,17 @@ export async function apiFetch(path, options = {}) {
   
   let res = await doRequest(token);
   
+  // 401 mid-session (accessToken expiró en memoria) → un solo reintento
   if (res.status === 401) {
-    // accessToken expiró durante la sesión → refrescar una vez más
-    _accessToken = null;
+    state.accessToken = null;
     token = await doRefresh();
     if (!token) return null;
     res = await doRequest(token);
   }
   
-  if (res.status === 401) {
-    forceLogout();
-    return null;
-  }
+  if (res.status === 401) { forceLogout(); return null; }
   
-  try {
-    return await res.json();
-  } catch {
-    return null;
-  }
+  try { return await res.json(); } catch { return null; }
 }
 
 export { API };
