@@ -78,7 +78,7 @@ import AppLayout from '../layouts/AppLayout.astro';
   <div class="item-list" id="compras-list"><div class="loading">Cargando…</div></div>
 
   <script>
-    import { apiFetch, getToken } from '/src/lib/auth-client.js';
+    import { apiFetch } from '/src/lib/auth-client.js';
 
     // Greeting
     const user = JSON.parse(localStorage.getItem('user') || 'null');
@@ -143,12 +143,6 @@ import AppLayout from '../layouts/AppLayout.astro';
           <div class="item-end">$${(c.total || 0).toLocaleString('es-AR')}</div>
         </div>`).join('');
     }
-
-    // Obtener token UNA VEZ antes de lanzar fetches en paralelo.
-    // Esto garantiza que cuando los 3 apiFetch() se ejecuten, ya haya
-    // un accessToken en window.__despensa y no disparen refreshes paralelos.
-    const ready = await getToken();
-    if (!ready) return; // forceLogout() ya redirigió
 
     loadAlerts();
     loadTotal();

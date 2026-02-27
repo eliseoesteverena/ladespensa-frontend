@@ -12,6 +12,55 @@ const { title = 'La Despensa' } = Astro.props;
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>{title} — La Despensa</title>
   <link rel="stylesheet" href="/base.css" />
+
+  <!--
+    AUTH BOOTSTRAP — se ejecuta antes que cualquier script de la página.
+    1. Lee el refreshToken del localStorage.
+    2. Llama a /auth/refresh UNA SOLA VEZ.
+    3. Guarda el accessToken en window.__token.
+    4. Las páginas leen window.__token directamente — sin imports, sin race conditions.
+
+    Si no hay refreshToken → redirige a /login inmediatamente (antes de renderizar).
+  -->
+  <script>
+    (function () {
+      const API = 'https://ladespensa-services.eliseo050595.workers.dev';
+      const rt  = localStorage.getItem('refreshToken');
+
+      if (!rt) {
+        window.location.replace('/login');
+        // Detener cualquier ejecución posterior
+        document.documentElement.style.display = 'none';
+        return;
+      }
+
+      // Bloquear el renderizado hasta tener el token
+      // Usamos un script síncrono que lanza el fetch y resuelve antes de que
+      // los scripts de la página (defer/module) corran.
+      window.__tokenReady = fetch(API + '/auth/refresh', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ refresh_token: rt }),
+      })
+      .then(function (res) {
+        if (!res.ok) throw new Error('refresh failed');
+        return res.json();
+      })
+      .then(function (data) {
+        window.__token = data.accessToken;
+        // Actualizar refreshToken (rotación)
+        localStorage.setItem('refreshToken', data.refreshToken);
+        var maxAge = 30 * 24 * 60 * 60;
+        document.cookie = 'refreshToken=' + data.refreshToken + '; Max-Age=' + maxAge + '; path=/; SameSite=Strict';
+      })
+      .catch(function () {
+        localStorage.removeItem('refreshToken');
+        localStorage.removeItem('user');
+        document.cookie = 'refreshToken=; Max-Age=0; path=/';
+        window.location.replace('/login');
+      });
+    })();
+  </script>
   <style>
     :root {
       --accent:       #16a34a;
