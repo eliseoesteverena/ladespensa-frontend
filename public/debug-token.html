@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Diagnóstico de Token — La Despensa</title>
+  <style>
+    body { font-family: monospace; padding: 20px; background: #111; color: #eee; font-size: 14px; }
+    h2 { color: #4ade80; }
+    .step { margin: 16px 0; padding: 12px; border-radius: 6px; background: #1e1e1e; border-left: 4px solid #444; }
+    .step.ok  { border-color: #4ade80; }
+    .step.err { border-color: #f87171; }
+    .step.info{ border-color: #60a5fa; }
+    .label { font-weight: bold; margin-bottom: 6px; }
+    .val { color: #fbbf24; word-break: break-all; }
+    .status-ok  { color: #4ade80; }
+    .status-err { color: #f87171; }
+    button {
+      background: #16a34a; color: white; border: none;
+      padding: 10px 20px; border-radius: 6px; cursor: pointer;
+      font-size: 14px; margin: 4px;
+    }
+    button:hover { background: #15803d; }
+    button.sec { background: #2563eb; }
+    button.sec:hover { background: #1d4ed8; }
+    button.danger { background: #dc2626; }
+    pre { margin: 0; white-space: pre-wrap; }
+  </style>
+</head>
+<body>
+
+<h2>🔬 Diagnóstico de Token — La Despensa</h2>
+<p>Ejecuta cada paso en orden y observá los resultados.</p>
+
+<div style="margin-bottom:16px;">
+  <button onclick="runAll()">▶ Ejecutar todo</button>
+  <button class="sec" onclick="clearLog()">Limpiar</button>
+  <button class="danger" onclick="clearStorage()">⚠ Limpiar localStorage</button>
+</div>
+
+<div id="log"></div>
+
+<script>
+  const API = 'https://ladespensa-services.eliseo050595.workers.dev';
+  const log = document.getElementById('log');
+
+  function addStep(type, label, content) {
+    const div = document.createElement('div');
+    div.className = 'step ' + type;
+    div.innerHTML = '<div class="label">' + label + '</div><pre class="val">' +
+      (typeof content === 'object' ? JSON.stringify(content, null, 2) : content) +
+      '</pre>';
+    log.appendChild(div);
+    div.scrollIntoView();
+    return div;
+  }
+
+  function clearLog() { log.innerHTML = ''; }
+  function clearStorage() {
+    localStorage.removeItem('refreshToken');
+    localStorage.removeItem('user');
+    document.cookie = 'refreshToken=; Max-Age=0; path=/';
+    addStep('info', 'localStorage limpiado', 'refreshToken y user eliminados.');
+  }
+
+  // ── PASO 1: Ver qué hay en localStorage ─────────────────────────────────
+  async function step1_checkStorage() {
+    const rt   = localStorage.getItem('refreshToken');
+    const user = localStorage.getItem('user');
+    addStep(rt ? 'ok' : 'err', '1. Estado de localStorage', {
+      refreshToken: rt ? rt.substring(0, 30) + '...' : 'NO EXISTE',
+      user:         user ? JSON.parse(user) : 'NO EXISTE',
+    });
+    return rt;
+  }
+
+  // ── PASO 2: Llamar a /auth/refresh y ver qué devuelve ───────────────────
+  async function step2_refresh(rt) {
+    if (!rt) { addStep('err', '2. Refresh', 'Sin refreshToken — saltando.'); return null; }
+
+    addStep('info', '2. Llamando a /auth/refresh...', 'POST con refreshToken: ' + rt.substring(0,20) + '...');
+
+    const res  = await fetch(API + '/auth/refresh', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ refresh_token: rt }),
+    });
+    const body = await res.json();
+
+    addStep(res.ok ? 'ok' : 'err',
+      '2. Respuesta de /auth/refresh — HTTP ' + res.status,
+      body
+    );
+
+    if (!res.ok) return null;
+
+    // Guardar el nuevo refreshToken
+    localStorage.setItem('refreshToken', body.refreshToken);
+    addStep('info', '2b. Nuevo refreshToken guardado en localStorage',
+      body.refreshToken.substring(0,30) + '...');
+
+    return body.accessToken;
+  }
+
+  // ── PASO 3: Verificar el accessToken con /auth/verify ───────────────────
+  async function step3_verify(accessToken) {
+    if (!accessToken) { addStep('err', '3. Verify', 'Sin accessToken — saltando.'); return; }
+
+    addStep('info', '3. Verificando token con GET /auth/verify...', accessToken.substring(0,40) + '...');
+
+    const res  = await fetch(API + '/auth/verify', {
+      headers: { 'Authorization': 'Bearer ' + accessToken }
+    });
+    const body = await res.json();
+
+    addStep(res.ok && body.valid ? 'ok' : 'err',
+      '3. Respuesta de /auth/verify — HTTP ' + res.status,
+      body
+    );
+
+    return res.ok && body.valid;
+  }
+
+  // ── PASO 4: Llamar a /account/me con el token ────────────────────────────
+  async function step4_me(accessToken) {
+    if (!accessToken) { addStep('err', '4. /account/me', 'Sin accessToken — saltando.'); return; }
+
+    const res  = await fetch(API + '/account/me', {
+      headers: { 'Authorization': 'Bearer ' + accessToken }
+    });
+    const body = await res.json();
+
+    addStep(res.ok ? 'ok' : 'err',
+      '4. GET /account/me — HTTP ' + res.status,
+      body
+    );
+  }
+
+  // ── PASO 5: Llamar a /stock con el token ─────────────────────────────────
+  async function step5_stock(accessToken) {
+    if (!accessToken) { addStep('err', '5. /stock', 'Sin accessToken — saltando.'); return; }
+
+    const res  = await fetch(API + '/stock', {
+      headers: { 'Authorization': 'Bearer ' + accessToken }
+    });
+    const body = await res.json();
+
+    addStep(res.ok ? 'ok' : 'err',
+      '5. GET /stock — HTTP ' + res.status,
+      res.ok ? { items: body.data?.length + ' items' } : body
+    );
+  }
+
+  // ── PASO 6: Login fresco para comparar ──────────────────────────────────
+  async function step6_freshLogin() {
+    const email    = prompt('Email:');
+    if (!email) return;
+    const password = prompt('Contraseña:');
+    if (!password) return;
+
+    addStep('info', '6. Haciendo login fresco...', { email });
+
+    const res  = await fetch(API + '/auth/login', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ email, password }),
+    });
+    const body = await res.json();
+
+    addStep(res.ok ? 'ok' : 'err',
+      '6. Respuesta de /auth/login — HTTP ' + res.status,
+      res.ok ? {
+        accessToken:  body.accessToken?.substring(0,40) + '...',
+        refreshToken: body.refreshToken?.substring(0,30) + '...',
+        user:         body.user,
+      } : body
+    );
+
+    if (!res.ok) return;
+
+    // Guardar y verificar
+    const freshAccess = body.accessToken;
+    addStep('info', '6b. Probando el token de LOGIN directo en /stock...', '');
+
+    const stockRes  = await fetch(API + '/stock', {
+      headers: { 'Authorization': 'Bearer ' + freshAccess }
+    });
+    const stockBody = await stockRes.json();
+
+    addStep(stockRes.ok ? 'ok' : 'err',
+      '6c. GET /stock con token de login — HTTP ' + stockRes.status,
+      stockRes.ok ? { items: stockBody.data?.length + ' items' } : stockBody
+    );
+  }
+
+  async function runAll() {
+    clearLog();
+    addStep('info', '🚀 Iniciando diagnóstico...', new Date().toISOString());
+    const rt          = await step1_checkStorage();
+    const accessToken = await step2_refresh(rt);
+    await step3_verify(accessToken);
+    await step4_me(accessToken);
+    await step5_stock(accessToken);
+    addStep('info', '--- Diagnóstico completado ---',
+      'Si /stock dio 401 pero /auth/verify dio valid:true, el problema es el tenant_id en el token.');
+  }
+
+  // Botón extra para login fresco
+  const btn = document.createElement('button');
+  btn.className = 'sec';
+  btn.textContent = '6. Login fresco + probar /stock';
+  btn.onclick = step6_freshLogin;
+  document.querySelector('div').appendChild(btn);
+</script>
+</body>
+</html>
